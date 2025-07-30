@@ -13,13 +13,11 @@ class Land:
 
     Attributes:
         - area (float): Total area of land within reach of the economy
-        - parcels (dict[parcel ID, share of land]): Maps instance of Parcel to 
-        their share of the overall land available
-        - ownership (dict[agent ID, parcel ID]): maps parcels to their owner
+        - ownership (dict[agent ID, parcel size]): parcel and owners have same ID, map
+        agent to parcel size. parcel 1 is not owned.
     '''
-    def __init__(self, model, size):
-        self.area = size
-        self.parcels = {}
+    def __init__(self, model, area):
+        self.area = area
         self.ownership = {}
         self.shock = []
     
@@ -27,6 +25,9 @@ class Land:
         '''Generate weather shock affecting yield for all parcels'''
         W = sss.norm.rvs(loc=0, scale=0.255)
         self.shock.append(W)
+
+
+
 
 class Parcel(mesa.Agent):
     '''
@@ -37,20 +38,21 @@ class Parcel(mesa.Agent):
         - yld (float): captures the yield in mass per surface of the parcel.
         - use (bool): True if land is being used to grow crop, False ow.
     '''
-    def __init__(self,  model):
+    def __init__(self,  model, natural_yld):
         super().__init__(model)
         self.health = 1
         self.use = True
-        self.yld = []
+        self.yld = [natural_yld]
     
-    def cycle(self, model):
+    def get_yld(self, model):
         # generate pre-weather yield.
         fert = 0.5 + 1.5*self.health
 
         # account for weather shock
         shock = self.model.land.shock[-1]
         self.yld.append(fert*(1 + shock))
-        
+
+     def degrade_par(self):
         # degrade land
         if self.use:
             self.health *= 0.95
@@ -58,40 +60,66 @@ class Parcel(mesa.Agent):
             self.health = min(1, self.health*1.05)
 
 
-class Simulation(mesa.Model):
-    def __init__(self, n, seed=None):
-        super().__init__(seed=seed)
-        self.land = Land(self, size=100)
-        self.num_agents = n
-        Parcel.create_agents(model=self, n=n)
-        
-
-    def step(self):
-        self.agents.shuffle_do("cycle")
-
-
 
 
 # define econmic actors 
 class Capitalist(mesa.Agent):
-    def __init__(self, model, share):
+    def __init__(self, model):
         super.__init__(model)
         self.wealth = 0
-        self.land = Land*share
         self.wheat = 0
+        self.parcel = None
+        self.parcel_size = None
         
     def grow(self, price, wage):
-        EY = Land.yld_hist[-1]
-        L = 1 
+        # get expected yield (previous yield)
+        EY = self.parcel.yld[-2]
+
+        L = self.parcel_size * self.model.land.area
         land_used = int(EY*L*price - 2*wage > 0)
         if land_used == 1:
-            self.land.use = True
-            self.wheat =  L*Y
+            self.model.parcel.use = True
+            self.wheat += L*self.model.parcel.yld
+        else: 
+            self.model.parcel.use = False
+
+    def sell(self, price, wage):
+        if self.wheat != 0:
+            self.wealth += self.wheat*price - 2*self.parcel_size*wage
 
 
 
 
+class Simulation(mesa.Model):
+    def __init__(self, n: int, land_size: float, parcel_size: list, seed=None):
+        super().__init__(seed=seed)
+        self.num_agents = n
+
+        # create parcel and agents
+        self.parcel = Parcel.create_agents(model=self, n=n+1)
+        self.capitalist = Capitalist.create_agents(model=self, n=n+1)
+
+        # create land environment and distribute parcels
+        self.land = Land(self, size=land_size)
+        for cap, par in zip(self.capitalist, self.parcel):
+            cap.parcel = par
+        for cap, size in zip(self.capitalist, parcel_size):
+            cap.parcel_size = size
         
+
+    def step(self):
+        # generate weather shock
+        self.land.weather_shock()
+
+        # get parcel yields
+        self.parcel.shuffle_do("")
+
+        # grow crops
+
+        # sell wheat
+
+        # degrade land
+      
 
 
 
