@@ -11,8 +11,8 @@ class Oil:
         self.demand_total = 0
         self.supply = float('inf')
 
-    def receive_demand(self, firm_id, quantity):
-        self.demand[firm_id] = quantity
+    def receive_demand(self, agent_id, quantity):
+        self.demand[agent_id] = quantity
     
     def update_price(self):
         pass
@@ -25,8 +25,8 @@ class Gas:
         self.demand_total = 0
         self.supply = float('inf')
 
-    def receive_demand(self, firm_id, quantity):
-        self.demand[firm_id] = quantity
+    def receive_demand(self, agent_id, quantity):
+        self.demand[agent_id] = quantity
 
     
     def update_price(self):
@@ -40,8 +40,8 @@ class Electricity:
         self.demand_total = 0
         self.supply = float('inf')
 
-    def receive_demand(self, firm_id, quantity):
-        self.demand[firm_id] = quantity
+    def receive_demand(self, agent_id, quantity):
+        self.demand[agent_id] = quantity
     
     def update_price(self):
         pass
@@ -146,18 +146,123 @@ class Firm(mesa.Agent):
 
 
 class Household(mesa.Agent):
-    def __init__(self, model, min_good):
-        # reservation wage
-        self.res_wage = min_good / self.model.firm.price
+    def __init__(self,
+                 model,
+                 oil_cons: float,
+                 gas_cons: float,
+                 elec_cons: float,
+                 good_cons:float):
+        super().__init__(model)
 
-        # wealth
+        # consomation behavior
+        self.oil_cons = oil_cons
+        self.gas_cons = gas_cons
+        self.elec_cons = elec_cons
+        self.good_cons = good_cons
+
+        # wealth and reservation wage
         self.wealth = 0
+        self.res_wage = 0
+
+    def form_res_wage(self):
+        self.res_wage = (self.oil_cons * self.model.oil.price
+                         + self.gas_cons * self.model.gas.price
+                         + self.elec_cons * self.model.elec.price
+                         + self.good_cons * self.model.good_market.price)
+
+    def house_demand(self):
+        self.model.oil.receive_demand(self.oil_cons)
+        self.model.gas.receive_demand(self.gas_cons)
+        self.model.elec.receive_demand(self.elec_cons)
+        self.model.good_market.receive_demand(self.good_cons)
+
+    def consume_rest(self):
+        
+
+class GoodMarket:
+    '''
+    Manages the goods market. matches demand to supply
+    '''
+    def __init__(self):
+        self.demand = {}
+        self.supply = {}
+        self.price_catalog = {}
+
+    def get_price_catalog(self, firm_id, ):
+
+    
+    def receive_demand(self, house_id, quantity):
+        self.demand[house_id] = quantity
+
+    def receive_supply(self, firm_id, quantity):
+        self.supply[firm_id] = quantity
+
+
+
 
 
 class LaborMarket:
-    def __init__(self, model):
+    def __init__(self):
+        pass
 
     def match(self):
+        pass
 
 
+class CityModel(mesa.Model):
+    def __init__(self,
+                 num_firm: int,
+                 num_house: int,
+                 oil_base_price: float,
+                 gas_base_price: float,
+                 elec_base_price: float,
+                 markup: np.array,
+                 wage: np.array,
+                 good_per_oil: np.array,
+                 good_per_gas: np.array,
+                 good_per_elec: np.array,
+                 oil_cons: np.array,
+                 gas_cons: np.array,
+                 elec_cons: np.array,
+                 good_cons: np.array,
+                 lab_prod: np.array,
+                 alpha: np.array,
+                 seed=None):
+        super().__init__(seed=seed)
+        self.num_firm = num_firm
+        self.num_house = num_house
 
+        # instantiate energy carriers
+        self.oil = Oil(oil_base_price)
+        self.gas = Gas(gas_base_price)
+        self.elec = Electricity(elec_base_price)
+
+        # instantiate markets
+        self.labor_market = LaborMarket
+        self.good_market = GoodMarket
+
+        # instantiate firms and households
+        self.firm = {}
+        for i in range(num_firm):
+            firm = Firm(model=self,
+                        markup=markup[i],
+                        lab_prod=lab_prod[i],
+                        wage=wage[i],
+                        good_per_oil=good_per_oil[i],
+                        good_per_gas=good_per_gas[i],
+                        good_per_elec=good_per_elec[i],
+                        alpha=alpha[i])
+            self.agents.add(firm)
+            self.firm[firm.unique_id] = firm
+
+        self.house = {}
+        for i in range(num_house):
+            house = Household(model=self,
+                              oil_cons=oil_cons[i],
+                              gas_cons=gas_cons[i],
+                              elec_cons=elec_cons[i],
+                              good_cons=good_cons[i])
+            self.agents.add(house)
+            self.house[house.unique_id] = house
+
+        
