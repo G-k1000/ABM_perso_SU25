@@ -131,6 +131,15 @@ class Firm(mesa.Agent):
         '''
         self.labor_demand = np.floor(self.wage / (self.alpha * self.lab_prod * (self.price - self.energy_cost))) ** (1/(1 - self.alpha))
 
+    def hire(self, laborer):
+        '''
+        hire labor if enough funds are sufficient
+        '''
+        if self.wealth > self.wage:
+            self.labor_hired += 1
+            self.wealth -= self.wage
+            laborer.wage +=  self.wage
+
     def buy_oil(self, price):
         if self.wealth > price * self.oil_demand: 
             self.oil = self.oil_demand
@@ -145,14 +154,6 @@ class Firm(mesa.Agent):
         if self.wealth > price * self.elec_demand: 
             self.elec = self.elec_demand
             self.wealth -= price * self.elec_demand
-    
-    def sell_good(self):
-        '''
-        '''
-        if self.output > 0:
-            self.output -= 1
-            self.wealth += self.price
-
 
     def demand_energy(self):
         '''
@@ -189,10 +190,10 @@ class Household(mesa.Agent):
         self.res_wage = 0
 
         # good and energy demand
-        self.demand_oil = 0
-        self.demand_gas = 0
-        self.demand_elec = 0
-        self.demand_good = 0
+        self.oil_demand = 0
+        self.gas_demand = 0
+        self.elec_demand = 0
+        self.good_demand = 0
 
         # good and energy possesion
         self.oil = 0
@@ -228,11 +229,23 @@ class Household(mesa.Agent):
             self.elec = self.demand_elec
             self.wealth -= price * self.demand_elec
 
-    def buy_good(self, price):
-        if self.wealth > price and self.demand > self.good: 
-            self.good += 1 
-            self.wealth -= 1
-        
+    def buy_good(self, firm):
+        '''
+        firms buys good from the same company until their demand is met or the firms
+        runs out of goods.
+        '''
+        # check how much good could be bought given budget
+        allowance = np.floor(self.wealth / firm.price)
+
+        # check firm stock and pick lowest
+        goods_purchased = min(allowance, firm.output)
+
+        # update firm and household stock and wealth
+        self.good += goods_purchased
+        self.wealth -= goods_purchased * firm.price
+        firm.output -= goods_purchased
+        firm.wealth += goods_purchased * firm.price
+
 
 class GoodMarket:
     '''
@@ -246,8 +259,6 @@ class GoodMarket:
     def update_pricecat(self):
         for fid, firm in self.model.firm.items():
             self.price_catalog[fid] = [firm.price]
-
-
     
     def receive_demand(self, house_id, quantity):
         self.demand[house_id] = quantity
@@ -264,21 +275,41 @@ class GoodMarket:
         )
         buying_house = [house for house in self.model.agent if isinstance(house, Household) and house.wealth > 0]
         random.shuffle(buying_house)
-        while selling_firm: 
-            for house in buying_house:
-                if selling_firm
+        for house in buying_house:
+            while house.good_demand < house.good:
+                house.buy_good(selling_firm[1])
 
- 
-
-
+                # if firm runs out remove it
+                if selling_firm[1].output == 0:
+                    selling_firm.remove(selling_firm[1])
+                
+                # if all firm run out or household does not have enough to purchase
+                # end loop.
+                if not selling_firm or house.wealth < selling_firm[1].price:
+                    break
 
 
 class LaborMarket:
     def __init__(self):
-        pass
+        self.labor_demand
 
-    def match(self):
-        pass
+    def match_labor(self):
+        # get priority list (for now highest paying firms first)
+        hiring_firm = sorted(
+            [firm for firm in self.model.agent if isinstance(firm, Firm) and firm.labor_demand > 0],
+            key=lambda firm: firm.wage,
+            reverse=True
+        )
+        working_house = [house for house in self.model.agent if isinstance(house, Household)]
+        random.shuffle(working_house)
+
+        # hire labor 1 by 1 from priority list until labor needs are met or labor is scarce
+        for firm in hiring_firm:
+            while firm.labor_hired < firm.labor_demand:
+                firm.hire(working_house[1])
+                working_house.remove(working_house[1])
+                if not working_house:
+                    break
 
 
 class CityModel(mesa.Model):
