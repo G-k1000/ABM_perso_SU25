@@ -2,7 +2,8 @@ import numpy as np
 import scipy.stats as sps
 import mesa
 import matplotlib.pyplot as plt
-
+import pandas as pd
+import random
 
 class Oil: 
     def __init__(self, base_price):
@@ -93,7 +94,7 @@ class Firm(mesa.Agent):
         # energy demanded by firms
         self.oil_demand = 0
         self.gas_demand = 0
-        self.electricity_demand = 0
+        self.elec_demand = 0
 
         # labor demanded and hired
         self.labor_demand = 0
@@ -105,7 +106,7 @@ class Firm(mesa.Agent):
         self.good_per_elec = good_per_elec
 
         # energy cost of producing a single good
-        self.energy_cost = self.model.oil.price + self.model.gas.price + self.model.electricity.price
+        self.energy_cost = self.model.oil.price + self.model.gas.price + self.model.elec.price
         
         # price setting parameter
         self.wage = wage
@@ -129,6 +130,29 @@ class Firm(mesa.Agent):
         determine optimal amount of labor by maximizing profit.
         '''
         self.labor_demand = np.floor(self.wage / (self.alpha * self.lab_prod * (self.price - self.energy_cost))) ** (1/(1 - self.alpha))
+
+    def buy_oil(self, price):
+        if self.wealth > price * self.oil_demand: 
+            self.oil = self.oil_demand
+            self.wealth -= price * self.oil_demand
+    
+    def buy_gas(self, price):
+        if self.wealth > price * self.gas_demand: 
+            self.gas = self.gas_demand
+            self.wealth -= price * self.gas_demand
+
+    def buy_oil(self, price):
+        if self.wealth > price * self.elec_demand: 
+            self.elec = self.elec_demand
+            self.wealth -= price * self.elec_demand
+    
+    def sell_good(self):
+        '''
+        '''
+        if self.output > 0:
+            self.output -= 1
+            self.wealth += self.price
+
 
     def demand_energy(self):
         '''
@@ -164,6 +188,19 @@ class Household(mesa.Agent):
         self.wealth = 0
         self.res_wage = 0
 
+        # good and energy demand
+        self.demand_oil = 0
+        self.demand_gas = 0
+        self.demand_elec = 0
+        self.demand_good = 0
+
+        # good and energy possesion
+        self.oil = 0
+        self.gas = 0
+        self.elec = 0
+        self.good = 0
+
+
     def form_res_wage(self):
         self.res_wage = (self.oil_cons * self.model.oil.price
                          + self.gas_cons * self.model.gas.price
@@ -176,7 +213,25 @@ class Household(mesa.Agent):
         self.model.elec.receive_demand(self.elec_cons)
         self.model.good_market.receive_demand(self.good_cons)
 
-    def consume_rest(self):
+    def buy_oil(self, price):
+        if self.wealth > price * self.demand_oil: 
+            self.oil = self.demand_oil
+            self.wealth -= price * self.demand_oil
+    
+    def buy_gas(self, price):
+        if self.wealth > price * self.demand_gas: 
+            self.gas = self.demand_gas
+            self.wealth -= price * self.demand_gas
+
+    def buy_oil(self, price):
+        if self.wealth > price * self.demand_elec: 
+            self.elec = self.demand_elec
+            self.wealth -= price * self.demand_elec
+
+    def buy_good(self, price):
+        if self.wealth > price and self.demand > self.good: 
+            self.good += 1 
+            self.wealth -= 1
         
 
 class GoodMarket:
@@ -188,7 +243,10 @@ class GoodMarket:
         self.supply = {}
         self.price_catalog = {}
 
-    def get_price_catalog(self, firm_id, ):
+    def update_pricecat(self):
+        for fid, firm in self.model.firm.items():
+            self.price_catalog[fid] = [firm.price]
+
 
     
     def receive_demand(self, house_id, quantity):
@@ -197,6 +255,20 @@ class GoodMarket:
     def receive_supply(self, firm_id, quantity):
         self.supply[firm_id] = quantity
 
+    def match_supply(self):
+        # define priority list in matching: in future should account for proximity between 
+        # firms and households.
+        selling_firm = sorted(
+            [firm for firm in self.model.agents if isinstance(firm, Firm) and firm.output > 0]
+            key=lambda firm: firm.price
+        )
+        buying_house = [house for house in self.model.agent if isinstance(house, Household) and house.wealth > 0]
+        random.shuffle(buying_house)
+        while selling_firm: 
+            for house in buying_house:
+                if selling_firm
+
+ 
 
 
 
@@ -237,10 +309,6 @@ class CityModel(mesa.Model):
         self.gas = Gas(gas_base_price)
         self.elec = Electricity(elec_base_price)
 
-        # instantiate markets
-        self.labor_market = LaborMarket
-        self.good_market = GoodMarket
-
         # instantiate firms and households
         self.firm = {}
         for i in range(num_firm):
@@ -264,5 +332,10 @@ class CityModel(mesa.Model):
                               good_cons=good_cons[i])
             self.agents.add(house)
             self.house[house.unique_id] = house
+
+        # instantiate markets
+        self.labor_market = LaborMarket
+        self.good_market = GoodMarket
+
 
         
