@@ -123,7 +123,7 @@ class Firm(mesa.Agent):
         '''
         produce output given optimal amount of labor.
         '''
-        self.output = np.floor(self.lab_prod * self.labor_demand ** self.alpha)
+        self.output = np.floor(self.lab_prod * self.labor_hired ** self.alpha)
 
     def demand_labor(self):
         '''
@@ -133,9 +133,10 @@ class Firm(mesa.Agent):
 
     def hire(self, laborer):
         '''
-        hire labor if enough funds are sufficient
+        hire labor if enough funds are sufficient and reservation wage
+        is met.
         '''
-        if self.wealth > self.wage:
+        if self.wealth >= self.wage and laborer.res_wage <= self.wage:
             self.labor_hired += 1
             self.wealth -= self.wage
             laborer.wage +=  self.wage
@@ -303,13 +304,18 @@ class LaborMarket:
         working_house = [house for house in self.model.agent if isinstance(house, Household)]
         random.shuffle(working_house)
 
-        # hire labor 1 by 1 from priority list until labor needs are met or labor is scarce
+        # hire labor 1 by 1 from priority list until labor needs are met,
+        # firm fund are insufficient or labor is scarce.
         for firm in hiring_firm:
-            while firm.labor_hired < firm.labor_demand:
-                firm.hire(working_house[1])
-                working_house.remove(working_house[1])
+            while firm.labor_hired < firm.labor_demand and firm.wealth > firm.wage:
+
+                # check if there's labor left
                 if not working_house:
                     break
+
+                # remove next available worker from job market
+                worker = working_house.pop(0)
+                firm.hire(worker)
 
 
 class CityModel(mesa.Model):
@@ -367,6 +373,9 @@ class CityModel(mesa.Model):
         # instantiate markets
         self.labor_market = LaborMarket
         self.good_market = GoodMarket
+
+        def step(self):
+            pass
 
 
         
